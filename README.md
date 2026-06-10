@@ -1,0 +1,1 @@
+# author-api-republish-mock
