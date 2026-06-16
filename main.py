@@ -1,15 +1,27 @@
 import json
 import os
+import time
 import uuid
 
 import requests
 import uvicorn
 from fastapi import FastAPI
+from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse
 from structlog import get_logger
+import semver
 
 logger = get_logger()
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5100"],  # Management UI origin
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT"],
+    allow_headers=["*", "Access-Control-Allow-Origin"],
+)
 
 cir_host = os.environ.get("CIR_HOST", f"http://0.0.0.0:3030")
 
@@ -28,51 +40,65 @@ async def root(questionnaireVersionId: str, cirVersion: int):
             f"{cir_host}/collection-instruments/metadata?classifier_type=form_type&classifier_value={form_type}&language={language}&survey_id={survey_id}",
             timeout=10000,
         )
-        current_validator_version = list_ci.json()[0]["validator_version"]
-        new_ci_version = cirVersion + 1
-        new_validator_version = current_validator_version
-        new_guid = str(uuid.uuid4())
-        url = f"{cir_host}/collection-instruments?guid={new_guid}&validator_version={new_validator_version}&ci_version={new_ci_version}"
-        post_response = requests.post(url, json=schema, timeout=10000)
+
+        target_index = next(
+            (
+                i
+                for i, d in enumerate(list_ci.json())
+                if d["guid"] == questionnaireVersionId
+            ),
+            None,
+        )
+        old_validator_version = list_ci.json()[target_index]["validator_version"]
+        next_validator_version = str(
+            semver.VersionInfo.parse(old_validator_version).bump_patch()
+        )
+        url = f"{cir_host}/collection-instruments/validator-version?guid={questionnaireVersionId}&validator_version={next_validator_version}"
+        put_response = requests.put(
+            url,
+            json=schema,
+            timeout=10000,
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
         object_id = str(uuid.uuid4())
-        response_json = post_response.json()
-        if post_response.status_code == 200:
+        response_json = put_response.json()
+        time.sleep(5)
+        if put_response.status_code == 200:
             logger.info("OK: status 200")
-            return_object = json.dumps(
-                {
-                    "id": object_id,
-                    "cirId": new_guid,
-                    "cirVersion": new_ci_version,
-                    "surveyId": survey_id,
-                    "formType": form_type,
-                    "publishDate": response_json["published_at"],
-                    "success": True,
-                    "errorMessage": None,
-                    "displayErrorMessage": None,
-                    "__typename": "PublishHistoryEvent",
-                }
-            )
-            return return_object
+            return_object = {
+                "id": object_id,
+                "cirId": questionnaireVersionId,
+                "cirVersion": cirVersion,
+                "surveyId": survey_id,
+                "formType": form_type,
+                "publishDate": response_json["published_at"],
+                "success": True,
+                "errorMessage": None,
+                "displayErrorMessage": None,
+                "__typename": "PublishHistoryEvent",
+            }
+            headers = {"Access-Control-Allow-Origin": "*"}
+            return JSONResponse(content=return_object, headers=headers)
         else:
             logger.error(
-                f"Failed to post new schema, status code: {post_response.status_code}"
+                f"Failed to post new schema, status code: {put_response.status_code}"
             )
             message = response_json["message"]
-            return_object = json.dumps(
-                {
-                    "id": object_id,
-                    "cirId": questionnaireVersionId,
-                    "cirVersion": cirVersion,
-                    "surveyId": survey_id,
-                    "formType": form_type,
-                    "publishDate": None,
-                    "success": False,
-                    "errorMessage": message,
-                    "displayErrorMessage": message,
-                    "__typename": "PublishHistoryEvent",
-                }
-            )
-            return return_object
+            return_object = {
+                "id": object_id,
+                "cirId": questionnaireVersionId,
+                "cirVersion": cirVersion,
+                "surveyId": survey_id,
+                "formType": form_type,
+                "publishDate": None,
+                "success": False,
+                "errorMessage": message,
+                "displayErrorMessage": message,
+                "__typename": "PublishHistoryEvent",
+            }
+
+            headers = {"Access-Control-Allow-Origin": "*"}
+            return JSONResponse(content=return_object, headers=headers)
     return None
 
 
