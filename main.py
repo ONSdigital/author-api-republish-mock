@@ -1,5 +1,5 @@
-import json
 import os
+import random
 import time
 import uuid
 
@@ -62,7 +62,24 @@ async def root(questionnaireVersionId: str, cirVersion: int):
         )
         object_id = str(uuid.uuid4())
         response_json = put_response.json()
-        time.sleep(5)
+        time.sleep(10)
+        roll = random.randint(1, 100)
+        if roll <= 20:
+            logger.info("RANDOM FAIL")
+            return_object = {
+                "id": object_id,
+                "cirId": questionnaireVersionId,
+                "cirVersion": cirVersion,
+                "surveyId": survey_id,
+                "formType": form_type,
+                "publishDate": response_json["published_at"],
+                "success": False,
+                "errorMessage": None,
+                "displayErrorMessage": None,
+                "__typename": "PublishHistoryEvent",
+            }
+            headers = {"Access-Control-Allow-Origin": "*"}
+            return JSONResponse(content=return_object, headers=headers)
         if put_response.status_code == 200:
             logger.info("OK: status 200")
             return_object = {
