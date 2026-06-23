@@ -1,0 +1,14 @@
+services:
+  author-api-republish-mock:
+    build: ./
+    ports:
+      - 8081:8081
+    environment:
+      - CIR_HOST=api-cir:3030
+    restart: on-failure
+    networks:
+      - eq-cir-fastapi_default
+
+networks:
+  eq-cir-fastapi_default:
+    external: true

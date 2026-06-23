@@ -23,7 +23,7 @@ app.add_middleware(
     allow_headers=["*", "Access-Control-Allow-Origin"],
 )
 
-cir_host = os.environ.get("CIR_HOST", f"http://0.0.0.0:3030")
+cir_host = os.environ.get("CIR_HOST", "http://api-cir:3030")
 
 
 @app.get("/republishschema/{questionnaireVersionId}/cirversion/{cirVersion}")
